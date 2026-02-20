@@ -18,7 +18,8 @@ local Tabs = {
 local Config = {
     AutoRifle = false,
     AutoJuzo = false,
-    TargetRange = 2000 -- Aumentado para detectar alvos distantes
+    TargetRange = 2000,
+    TweenSpeed = 50 -- Velocidade lenta e controlada (original)
 }
 
 -- Serviços
@@ -107,7 +108,7 @@ task.spawn(function()
     end
 end)
 
--- Loop Auto Juzo com Verificação de Segurança e Teleporte Vertical
+-- Loop Auto Juzo
 task.spawn(function()
     while true do
         if Config.AutoJuzo then
@@ -119,15 +120,15 @@ task.spawn(function()
                     -- 1. Preparação: Sky Walk + Teleporte 1000 studs para cima
                     skillRemote:InvokeServer("Sky Walk2", {
                         char = char,
-                        cf = hrp.CFrame * CFrame.new(0, 10, 0) -- Pequeno ajuste de CFrame para o Sky Walk
+                        cf = hrp.CFrame * CFrame.new(0, 10, 0)
                     })
                     task.wait(0.1)
                     hrp.CFrame = hrp.CFrame * CFrame.new(0, 1000, 0)
                     task.wait(0.2)
 
-                    -- 2. Ir para Posição 1 (Tween na altura elevada)
+                    -- 2. Ir para Posição 1 (Tween na altura elevada com velocidade lenta)
                     local pos1_high = CFrame.new(1760.85242, 1009.82812977, -10489.0752)
-                    local success = tweenTo(pos1_high, 150) -- Velocidade aumentada para o trajeto alto
+                    local success = tweenTo(pos1_high, Config.TweenSpeed)
                     
                     if not success or not char:FindFirstChild("HumanoidRootPart") then return end
 
@@ -196,4 +197,4 @@ Tabs.Auto:AddToggle("AutoJuzo", {
 })
 
 Window:SelectTab(1)
-Fluent:Notify({ Title = "Comet", Content = "Script V3 (Evasão Vertical + Alcance)!", Duration = 5 })
+Fluent:Notify({ Title = "Comet", Content = "Script Finalizado com Velocidade Original!", Duration = 5 })
