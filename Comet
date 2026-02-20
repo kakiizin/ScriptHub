@@ -2,7 +2,7 @@ local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/
 
 local Window = Fluent:CreateWindow({
     Title = "Comet",
-    SubTitle = "", -- Removido conforme solicitado
+    SubTitle = "",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -24,41 +24,53 @@ local Config = {
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
--- Remotes
-local gunFunctions = ReplicatedStorage:WaitForChild("Events"):WaitForChild("GunManager"):WaitForChild("gunFunctions")
-local gunManager = ReplicatedStorage:WaitForChild("Events"):WaitForChild("GunManager")
-local skillRemote = ReplicatedStorage:WaitForChild("Events"):WaitForChild("Skill")
-local takeStam = ReplicatedStorage:WaitForChild("Events"):WaitForChild("takestam")
+-- Remotes (Chamadas Diretas)
+local Events = ReplicatedStorage:WaitForChild("Events")
+local GunManager = Events:WaitForChild("GunManager")
+local gunFunctions = GunManager:WaitForChild("gunFunctions")
+local skillRemote = Events:WaitForChild("Skill")
+local takeStam = Events:WaitForChild("takestam")
 
--- Funções Auxiliares de Combate
+-- Funções Auxiliares (Sem Varargs)
 local function hasScriptInside(model)
-    for _, child in ipairs(model:GetDescendants()) do
-        if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("ModuleScript") then return true end
+    local descendants = model:GetDescendants()
+    for i = 1, #descendants do
+        local child = descendants[i]
+        if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("ModuleScript") then 
+            return true 
+        end
     end
     return false
 end
 
 local function getTarget()
-    local closest, dist = nil, 500
+    local closest = nil
+    local dist = 500
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
     
-    for _, obj in ipairs(workspace:GetDescendants()) do
+    local rootPos = char.HumanoidRootPart.Position
+    local workspaceDescendants = workspace:GetDescendants()
+    
+    for i = 1, #workspaceDescendants do
+        local obj = workspaceDescendants[i]
         if obj:IsA("Humanoid") and obj.Parent and obj.Parent:IsA("Model") and obj.Health > 0 then
             local model = obj.Parent
             if not Players:GetPlayerFromCharacter(model) and model:FindFirstChild("Head") and hasScriptInside(model) then
-                local d = (char.HumanoidRootPart.Position - model.Head.Position).Magnitude
-                if d < dist then dist = d closest = model.Head end
+                local d = (rootPos - model.Head.Position).Magnitude
+                if d < dist then 
+                    dist = d 
+                    closest = model.Head 
+                end
             end
         end
     end
     return closest
 end
 
--- Função de Tween
+-- Função de Tween (Sem Varargs)
 local function tweenTo(cframe, speed)
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
@@ -68,11 +80,12 @@ local function tweenTo(cframe, speed)
     
     local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = cframe})
     
-    -- Loop de Dash durante o Tween
     local dashLoop = task.spawn(function()
         while tween.PlaybackState == Enum.PlaybackState.Begin or tween.PlaybackState == Enum.PlaybackState.Playing do
-            takeStam:FireServer(1, "dash")
-            task.wait(0.1)
+            pcall(function()
+                takeStam:FireServer(1, "dash")
+            end)
+            task.wait(0.2)
         end
     end)
     
@@ -81,7 +94,7 @@ local function tweenTo(cframe, speed)
     task.cancel(dashLoop)
 end
 
--- Loop Auto Rifle Simples
+-- Loop Auto Rifle
 task.spawn(function()
     while true do
         if Config.AutoRifle and not Config.AutoJuzo then
@@ -89,8 +102,8 @@ task.spawn(function()
             if target then
                 pcall(function()
                     gunFunctions:InvokeServer("reload", { Gun = "Rifle" })
-                    task.wait(0.05)
-                    gunManager:FireServer("fire", {
+                    task.wait(0.1)
+                    GunManager:FireServer("fire", {
                         Start = CFrame.lookAt(player.Character.HumanoidRootPart.Position, target.Position),
                         Gun = "Rifle",
                         joe = "true",
@@ -99,61 +112,68 @@ task.spawn(function()
                 end)
             end
         end
-        task.wait(0.15)
+        task.wait(0.3)
     end
 end)
 
--- Loop Auto Juzo
+-- Loop Auto Juzo (Estrutura Estática e Segura)
 task.spawn(function()
     while true do
         if Config.AutoJuzo then
-            pcall(function()
-                local char = player.Character
-                if not char then return end
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if hrp then
+                pcall(function()
+                    -- 1. Posição 1
+                    local pos1 = CFrame.new(1760.85242, 9.82812977, -10489.0752)
+                    tweenTo(pos1, 100)
+                    task.wait(0.2)
 
-                -- 1. Ir para Posição 1 (Tween + Dash)
-                local pos1 = CFrame.new(1760.85242, 9.82812977, -10489.0752)
-                tweenTo(pos1, 100) -- Velocidade 100 studs/s
+                    -- 2. Reload
+                    gunFunctions:InvokeServer("reload", { Gun = "Rifle" })
+                    task.wait(0.5)
 
-                -- 2. Reload e Espera 0.5s
-                gunFunctions:InvokeServer("reload", { Gun = "Rifle" })
-                task.wait(0.5)
-
-                -- 3. Sky Walk 2
-                skillRemote:InvokeServer("Sky Walk2", {
-                    char = char,
-                    cf = CFrame.new(1765.7352294921875, 17.062767028808594, -10489.6767578125, 0, 1, -0, 0, -0, -1, -1, 0, -0)
-                })
-                task.wait(0.2)
-
-                -- 4. Teleporte para Posição 2
-                char.HumanoidRootPart.CFrame = CFrame.new(1765.56335, 57.0781345, -10528.8643)
-                task.wait(0.15)
-
-                -- 5. Atirar (Gun Rifle na Cabeça)
-                local target = getTarget()
-                if target then
-                    gunManager:FireServer("fire", {
-                        Start = CFrame.lookAt(char.HumanoidRootPart.Position, target.Position),
-                        Gun = "Rifle",
-                        joe = "true",
-                        Position = target.Position
+                    -- 3. Sky Walk 2
+                    skillRemote:InvokeServer("Sky Walk2", {
+                        char = char,
+                        cf = CFrame.new(1765.7352294921875, 17.062767028808594, -10489.6767578125, 0, 1, -0, 0, -0, -1, -1, 0, -0)
                     })
-                end
-                task.wait(0.2)
+                    task.wait(0.3)
 
-                -- 6. Sky Walk 2 novamente
-                skillRemote:InvokeServer("Sky Walk2", {
-                    char = char,
-                    cf = CFrame.new(1765.7352294921875, 17.062767028808594, -10489.6767578125, 0, 1, -0, 0, -0, -1, -1, 0, -0)
-                })
-                task.wait(0.15)
+                    -- 4. Teleporte Posição 2
+                    if char:FindFirstChild("HumanoidRootPart") then
+                        char.HumanoidRootPart.CFrame = CFrame.new(1765.56335, 57.0781345, -10528.8643)
+                    end
+                    task.wait(0.2)
 
-                -- 7. Teleporte de volta para Posição 1
-                char.HumanoidRootPart.CFrame = CFrame.new(1760.85242, 9.82812977, -10489.0752)
-            end)
+                    -- 5. Atirar
+                    local target = getTarget()
+                    if target and char:FindFirstChild("HumanoidRootPart") then
+                        GunManager:FireServer("fire", {
+                            Start = CFrame.lookAt(char.HumanoidRootPart.Position, target.Position),
+                            Gun = "Rifle",
+                            joe = "true",
+                            Position = target.Position
+                        })
+                    end
+                    task.wait(0.3)
+
+                    -- 6. Sky Walk 2
+                    skillRemote:InvokeServer("Sky Walk2", {
+                        char = char,
+                        cf = CFrame.new(1765.7352294921875, 17.062767028808594, -10489.6767578125, 0, 1, -0, 0, -0, -1, -1, 0, -0)
+                    })
+                    task.wait(0.2)
+
+                    -- 7. Retorno Posição 1
+                    if char:FindFirstChild("HumanoidRootPart") then
+                        char.HumanoidRootPart.CFrame = CFrame.new(1760.85242, 9.82812977, -10489.0752)
+                    end
+                end)
+            end
         end
-        task.wait(0.1)
+        task.wait(0.2)
     end
 end)
 
@@ -171,4 +191,4 @@ Tabs.Auto:AddToggle("AutoJuzo", {
 })
 
 Window:SelectTab(1)
-Fluent:Notify({ Title = "Comet", Content = "Script Carregado!", Duration = 5 })
+Fluent:Notify({ Title = "Comet", Content = "Script V10 (Static Mode) Carregado!", Duration = 5 })
