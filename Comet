@@ -2,7 +2,7 @@ local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/
 
 local Window = Fluent:CreateWindow({
     Title = "Comet",
-    SubTitle = "",
+    SubTitle = "", -- Removido conforme solicitado
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -17,16 +17,13 @@ local Tabs = {
 -- Variáveis de Controle
 local Config = {
     AutoRifle = false,
-    AutoJuzo = false,
-    TargetRange = 2000,
-    StepSize = 10, -- Passos curtos de 10 studs (Bem abaixo do Threshold de 120)
-    StepWait = 0.1, -- Pequena pausa para o servidor processar a posição
-    SafeHeight = 400
+    AutoJuzo = false
 }
 
 -- Serviços
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
@@ -45,7 +42,7 @@ local function hasScriptInside(model)
 end
 
 local function getTarget()
-    local closest, dist = nil, Config.TargetRange
+    local closest, dist = nil, 500
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
     
@@ -61,30 +58,27 @@ local function getTarget()
     return closest
 end
 
--- Função de Movimentação Stealth (Passo a Passo)
--- Esta função substitui o Tween e o Teleporte para evitar o erro "TP Check"
-local function stealthMove(targetCFrame)
+-- Função de Tween
+local function tweenTo(cframe, speed)
     local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local hrp = char.HumanoidRootPart
+    local distance = (hrp.Position - cframe.Position).Magnitude
+    local duration = distance / speed
     
-    local startPos = hrp.Position
-    local endPos = targetCFrame.Position
-    local distance = (startPos - endPos).Magnitude
-    local steps = math.ceil(distance / Config.StepSize)
+    local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = cframe})
     
-    for i = 1, steps do
-        if not hrp or not hrp.Parent or not Config.AutoJuzo then return false end
-        
-        local nextPos = startPos:Lerp(endPos, i / steps)
-        hrp.CFrame = CFrame.new(nextPos)
-        
-        -- Envia o Dash para mascarar o movimento
-        pcall(function() takeStam:FireServer(1, "dash") end)
-        
-        task.wait(Config.StepWait)
-    end
-    return true
+    -- Loop de Dash durante o Tween
+    local dashLoop = task.spawn(function()
+        while tween.PlaybackState == Enum.PlaybackState.Begin or tween.PlaybackState == Enum.PlaybackState.Playing do
+            takeStam:FireServer(1, "dash")
+            task.wait(0.1)
+        end
+    end)
+    
+    tween:Play()
+    tween.Completed:Wait()
+    task.cancel(dashLoop)
 end
 
 -- Loop Auto Rifle Simples
@@ -109,79 +103,55 @@ task.spawn(function()
     end
 end)
 
--- Loop Auto Juzo (V8 - Stealth Movement)
+-- Loop Auto Juzo
 task.spawn(function()
     while true do
         if Config.AutoJuzo then
-            local char = player.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            
-            if hrp then
-                pcall(function()
-                    -- 1. Preparação: Sky Walk + Subida Stealth para 400 studs
-                    skillRemote:InvokeServer("Sky Walk2", {
-                        char = char,
-                        cf = hrp.CFrame * CFrame.new(0, 10, 0)
+            pcall(function()
+                local char = player.Character
+                if not char then return end
+
+                -- 1. Ir para Posição 1 (Tween + Dash)
+                local pos1 = CFrame.new(1760.85242, 9.82812977, -10489.0752)
+                tweenTo(pos1, 100) -- Velocidade 100 studs/s
+
+                -- 2. Reload e Espera 0.5s
+                gunFunctions:InvokeServer("reload", { Gun = "Rifle" })
+                task.wait(0.5)
+
+                -- 3. Sky Walk 2
+                skillRemote:InvokeServer("Sky Walk2", {
+                    char = char,
+                    cf = CFrame.new(1765.7352294921875, 17.062767028808594, -10489.6767578125, 0, 1, -0, 0, -0, -1, -1, 0, -0)
+                })
+                task.wait(0.2)
+
+                -- 4. Teleporte para Posição 2
+                char.HumanoidRootPart.CFrame = CFrame.new(1765.56335, 57.0781345, -10528.8643)
+                task.wait(0.15)
+
+                -- 5. Atirar (Gun Rifle na Cabeça)
+                local target = getTarget()
+                if target then
+                    gunManager:FireServer("fire", {
+                        Start = CFrame.lookAt(char.HumanoidRootPart.Position, target.Position),
+                        Gun = "Rifle",
+                        joe = "true",
+                        Position = target.Position
                     })
-                    task.wait(0.1)
-                    
-                    local highPos = hrp.CFrame * CFrame.new(0, Config.SafeHeight, 0)
-                    stealthMove(highPos)
-                    task.wait(0.2)
+                end
+                task.wait(0.2)
 
-                    -- 2. Ir para Posição 1 (Movimento Stealth Horizontal)
-                    local pos1_high = CFrame.new(1760.85242, Config.SafeHeight + 9.82812977, -10489.0752)
-                    local success = stealthMove(pos1_high)
-                    
-                    if not success or not char:FindFirstChild("HumanoidRootPart") then return end
+                -- 6. Sky Walk 2 novamente
+                skillRemote:InvokeServer("Sky Walk2", {
+                    char = char,
+                    cf = CFrame.new(1765.7352294921875, 17.062767028808594, -10489.6767578125, 0, 1, -0, 0, -0, -1, -1, 0, -0)
+                })
+                task.wait(0.15)
 
-                    -- 3. Descer Stealth para a Posição 1 Real
-                    local pos1_real = CFrame.new(1760.85242, 9.82812977, -10489.0752)
-                    stealthMove(pos1_real)
-                    task.wait(0.2)
-
-                    -- 4. Reload e Espera 0.5s
-                    gunFunctions:InvokeServer("reload", { Gun = "Rifle" })
-                    task.wait(0.5)
-
-                    -- 5. Sky Walk 2
-                    skillRemote:InvokeServer("Sky Walk2", {
-                        char = char,
-                        cf = CFrame.new(1765.7352294921875, 17.062767028808594, -10489.6767578125, 0, 1, -0, 0, -0, -1, -1, 0, -0)
-                    })
-                    task.wait(0.2)
-
-                    -- 6. Teleporte Curto para Posição 2 (Stealth)
-                    if char:FindFirstChild("HumanoidRootPart") then
-                        stealthMove(CFrame.new(1765.56335, 57.0781345, -10528.8643))
-                    else return end
-                    task.wait(0.15)
-
-                    -- 7. Atirar (Gun Rifle na Cabeça)
-                    local target = getTarget()
-                    if target and char:FindFirstChild("HumanoidRootPart") then
-                        gunManager:FireServer("fire", {
-                            Start = CFrame.lookAt(char.HumanoidRootPart.Position, target.Position),
-                            Gun = "Rifle",
-                            joe = "true",
-                            Position = target.Position
-                        })
-                    end
-                    task.wait(0.2)
-
-                    -- 8. Sky Walk 2 novamente
-                    skillRemote:InvokeServer("Sky Walk2", {
-                        char = char,
-                        cf = CFrame.new(1765.7352294921875, 17.062767028808594, -10489.6767578125, 0, 1, -0, 0, -0, -1, -1, 0, -0)
-                    })
-                    task.wait(0.15)
-
-                    -- 9. Retorno Stealth para Posição 1
-                    if char:FindFirstChild("HumanoidRootPart") then
-                        stealthMove(CFrame.new(1760.85242, 9.82812977, -10489.0752))
-                    end
-                end)
-            end
+                -- 7. Teleporte de volta para Posição 1
+                char.HumanoidRootPart.CFrame = CFrame.new(1760.85242, 9.82812977, -10489.0752)
+            end)
         end
         task.wait(0.1)
     end
@@ -201,4 +171,4 @@ Tabs.Auto:AddToggle("AutoJuzo", {
 })
 
 Window:SelectTab(1)
-Fluent:Notify({ Title = "Comet", Content = "Script V8 (Stealth Mode) Carregado!", Duration = 5 })
+Fluent:Notify({ Title = "Comet", Content = "Script Carregado!", Duration = 5 })
