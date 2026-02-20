@@ -19,8 +19,8 @@ local Config = {
     AutoRifle = false,
     AutoJuzo = false,
     TargetRange = 2000,
-    TweenSpeed = 50,
-    SafeHeight = 500 -- Altura reduzida para evitar detecção agressiva
+    TweenSpeed = 30, -- Velocidade reduzida para 30 conforme solicitado
+    SafeHeight = 400 -- Altura de evasão vertical de 400 studs
 }
 
 -- Serviços
@@ -61,7 +61,29 @@ local function getTarget()
     return closest
 end
 
--- Função de Tween com Verificação
+-- Função de Teleporte por Chunks (Pequenos saltos para segurança vertical)
+local function safeTeleport(targetCFrame)
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+    local hrp = char.HumanoidRootPart
+    
+    local startPos = hrp.Position
+    local endPos = targetCFrame.Position
+    local distance = (startPos - endPos).Magnitude
+    local stepSize = 15
+    local steps = math.ceil(distance / stepSize)
+    
+    for i = 1, steps do
+        if not hrp or not hrp.Parent then return false end
+        local nextPos = startPos:Lerp(endPos, i / steps)
+        hrp.CFrame = CFrame.new(nextPos)
+        task.wait(0.05)
+        pcall(function() takeStam:FireServer(1, "dash") end)
+    end
+    return true
+end
+
+-- Função de Tween Horizontal (Velocidade 30)
 local function tweenTo(cframe, speed)
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
@@ -109,7 +131,7 @@ task.spawn(function()
     end
 end)
 
--- Loop Auto Juzo (Versão Segura contra Anti-Cheat)
+-- Loop Auto Juzo (V7 - Sky Walk 400 + Tween 30)
 task.spawn(function()
     while true do
         if Config.AutoJuzo then
@@ -118,27 +140,26 @@ task.spawn(function()
             
             if hrp then
                 pcall(function()
-                    -- 1. Preparação Segura: Sky Walk + Tween Vertical (Em vez de teleporte instantâneo)
+                    -- 1. Preparação: Sky Walk + Subida por Chunks para 400 studs
                     skillRemote:InvokeServer("Sky Walk2", {
                         char = char,
                         cf = hrp.CFrame * CFrame.new(0, 10, 0)
                     })
                     task.wait(0.1)
                     
-                    -- Sobe suavemente para evitar o erro "+Y Axis too fast"
                     local highPos = hrp.CFrame * CFrame.new(0, Config.SafeHeight, 0)
-                    tweenTo(highPos, 100) -- Sobe a 100 studs/s (mais seguro que teleporte instantâneo)
+                    safeTeleport(highPos)
                     task.wait(0.2)
 
-                    -- 2. Ir para Posição 1 (Tween na altura elevada)
+                    -- 2. Ir para Posição 1 (Tween na altura de 400 com velocidade 30)
                     local pos1_high = CFrame.new(1760.85242, Config.SafeHeight + 9.82812977, -10489.0752)
                     local success = tweenTo(pos1_high, Config.TweenSpeed)
                     
                     if not success or not char:FindFirstChild("HumanoidRootPart") then return end
 
-                    -- 3. Descer Suavemente para a Posição 1 Real
+                    -- 3. Descer por Chunks para a Posição 1 Real
                     local pos1_real = CFrame.new(1760.85242, 9.82812977, -10489.0752)
-                    tweenTo(pos1_real, 100)
+                    safeTeleport(pos1_real)
                     task.wait(0.2)
 
                     -- 4. Reload e Espera 0.5s
@@ -152,9 +173,9 @@ task.spawn(function()
                     })
                     task.wait(0.2)
 
-                    -- 6. Teleporte para Posição 2
+                    -- 6. Teleporte para Posição 2 (Chunks)
                     if char:FindFirstChild("HumanoidRootPart") then
-                        char.HumanoidRootPart.CFrame = CFrame.new(1765.56335, 57.0781345, -10528.8643)
+                        safeTeleport(CFrame.new(1765.56335, 57.0781345, -10528.8643))
                     else return end
                     task.wait(0.15)
 
@@ -177,9 +198,9 @@ task.spawn(function()
                     })
                     task.wait(0.15)
 
-                    -- 9. Teleporte de volta para Posição 1
+                    -- 9. Retorno por Chunks para Posição 1
                     if char:FindFirstChild("HumanoidRootPart") then
-                        char.HumanoidRootPart.CFrame = CFrame.new(1760.85242, 9.82812977, -10489.0752)
+                        safeTeleport(CFrame.new(1760.85242, 9.82812977, -10489.0752))
                     end
                 end)
             end
@@ -202,4 +223,4 @@ Tabs.Auto:AddToggle("AutoJuzo", {
 })
 
 Window:SelectTab(1)
-Fluent:Notify({ Title = "Comet", Content = "Script V5 (Anti-Cheat Safe) Carregado!", Duration = 5 })
+Fluent:Notify({ Title = "Comet", Content = "Script V7 (Sky Walk 400 + Tween 30) Carregado!", Duration = 5 })
