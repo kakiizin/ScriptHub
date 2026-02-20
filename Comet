@@ -19,7 +19,8 @@ local Config = {
     AutoRifle = false,
     AutoJuzo = false,
     TargetRange = 2000,
-    TweenSpeed = 50 -- Velocidade lenta e controlada (original)
+    TweenSpeed = 50,
+    SafeHeight = 500 -- Altura reduzida para evitar detecção agressiva
 }
 
 -- Serviços
@@ -108,7 +109,7 @@ task.spawn(function()
     end
 end)
 
--- Loop Auto Juzo
+-- Loop Auto Juzo (Versão Segura contra Anti-Cheat)
 task.spawn(function()
     while true do
         if Config.AutoJuzo then
@@ -117,23 +118,27 @@ task.spawn(function()
             
             if hrp then
                 pcall(function()
-                    -- 1. Preparação: Sky Walk + Teleporte 1000 studs para cima
+                    -- 1. Preparação Segura: Sky Walk + Tween Vertical (Em vez de teleporte instantâneo)
                     skillRemote:InvokeServer("Sky Walk2", {
                         char = char,
                         cf = hrp.CFrame * CFrame.new(0, 10, 0)
                     })
                     task.wait(0.1)
-                    hrp.CFrame = hrp.CFrame * CFrame.new(0, 1000, 0)
+                    
+                    -- Sobe suavemente para evitar o erro "+Y Axis too fast"
+                    local highPos = hrp.CFrame * CFrame.new(0, Config.SafeHeight, 0)
+                    tweenTo(highPos, 100) -- Sobe a 100 studs/s (mais seguro que teleporte instantâneo)
                     task.wait(0.2)
 
-                    -- 2. Ir para Posição 1 (Tween na altura elevada com velocidade lenta)
-                    local pos1_high = CFrame.new(1760.85242, 1009.82812977, -10489.0752)
+                    -- 2. Ir para Posição 1 (Tween na altura elevada)
+                    local pos1_high = CFrame.new(1760.85242, Config.SafeHeight + 9.82812977, -10489.0752)
                     local success = tweenTo(pos1_high, Config.TweenSpeed)
                     
                     if not success or not char:FindFirstChild("HumanoidRootPart") then return end
 
-                    -- 3. Descer para a Posição 1 Real
-                    char.HumanoidRootPart.CFrame = CFrame.new(1760.85242, 9.82812977, -10489.0752)
+                    -- 3. Descer Suavemente para a Posição 1 Real
+                    local pos1_real = CFrame.new(1760.85242, 9.82812977, -10489.0752)
+                    tweenTo(pos1_real, 100)
                     task.wait(0.2)
 
                     -- 4. Reload e Espera 0.5s
@@ -197,4 +202,4 @@ Tabs.Auto:AddToggle("AutoJuzo", {
 })
 
 Window:SelectTab(1)
-Fluent:Notify({ Title = "Comet", Content = "Script Finalizado com Velocidade Original!", Duration = 5 })
+Fluent:Notify({ Title = "Comet", Content = "Script V5 (Anti-Cheat Safe) Carregado!", Duration = 5 })
