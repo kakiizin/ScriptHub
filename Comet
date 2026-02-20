@@ -19,14 +19,14 @@ local Config = {
     AutoRifle = false,
     AutoJuzo = false,
     TargetRange = 2000,
-    TweenSpeed = 30, -- Velocidade reduzida para 30 conforme solicitado
-    SafeHeight = 400 -- Altura de evasão vertical de 400 studs
+    StepSize = 10, -- Passos curtos de 10 studs (Bem abaixo do Threshold de 120)
+    StepWait = 0.1, -- Pequena pausa para o servidor processar a posição
+    SafeHeight = 400
 }
 
 -- Serviços
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
@@ -61,8 +61,9 @@ local function getTarget()
     return closest
 end
 
--- Função de Teleporte por Chunks (Pequenos saltos para segurança vertical)
-local function safeTeleport(targetCFrame)
+-- Função de Movimentação Stealth (Passo a Passo)
+-- Esta função substitui o Tween e o Teleporte para evitar o erro "TP Check"
+local function stealthMove(targetCFrame)
     local char = player.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
     local hrp = char.HumanoidRootPart
@@ -70,42 +71,19 @@ local function safeTeleport(targetCFrame)
     local startPos = hrp.Position
     local endPos = targetCFrame.Position
     local distance = (startPos - endPos).Magnitude
-    local stepSize = 15
-    local steps = math.ceil(distance / stepSize)
+    local steps = math.ceil(distance / Config.StepSize)
     
     for i = 1, steps do
-        if not hrp or not hrp.Parent then return false end
+        if not hrp or not hrp.Parent or not Config.AutoJuzo then return false end
+        
         local nextPos = startPos:Lerp(endPos, i / steps)
         hrp.CFrame = CFrame.new(nextPos)
-        task.wait(0.05)
+        
+        -- Envia o Dash para mascarar o movimento
         pcall(function() takeStam:FireServer(1, "dash") end)
+        
+        task.wait(Config.StepWait)
     end
-    return true
-end
-
--- Função de Tween Horizontal (Velocidade 30)
-local function tweenTo(cframe, speed)
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
-    local hrp = char.HumanoidRootPart
-    local distance = (hrp.Position - cframe.Position).Magnitude
-    local duration = distance / speed
-    
-    local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = cframe})
-    
-    local dashLoop = task.spawn(function()
-        while tween.PlaybackState == Enum.PlaybackState.Begin or tween.PlaybackState == Enum.PlaybackState.Playing do
-            if not hrp or not hrp.Parent then break end
-            takeStam:FireServer(1, "dash")
-            task.wait(0.1)
-        end
-    end)
-    
-    tween:Play()
-    tween.Completed:Wait()
-    task.cancel(dashLoop)
-    
-    if not hrp or not hrp.Parent then return false end
     return true
 end
 
@@ -131,7 +109,7 @@ task.spawn(function()
     end
 end)
 
--- Loop Auto Juzo (V7 - Sky Walk 400 + Tween 30)
+-- Loop Auto Juzo (V8 - Stealth Movement)
 task.spawn(function()
     while true do
         if Config.AutoJuzo then
@@ -140,7 +118,7 @@ task.spawn(function()
             
             if hrp then
                 pcall(function()
-                    -- 1. Preparação: Sky Walk + Subida por Chunks para 400 studs
+                    -- 1. Preparação: Sky Walk + Subida Stealth para 400 studs
                     skillRemote:InvokeServer("Sky Walk2", {
                         char = char,
                         cf = hrp.CFrame * CFrame.new(0, 10, 0)
@@ -148,18 +126,18 @@ task.spawn(function()
                     task.wait(0.1)
                     
                     local highPos = hrp.CFrame * CFrame.new(0, Config.SafeHeight, 0)
-                    safeTeleport(highPos)
+                    stealthMove(highPos)
                     task.wait(0.2)
 
-                    -- 2. Ir para Posição 1 (Tween na altura de 400 com velocidade 30)
+                    -- 2. Ir para Posição 1 (Movimento Stealth Horizontal)
                     local pos1_high = CFrame.new(1760.85242, Config.SafeHeight + 9.82812977, -10489.0752)
-                    local success = tweenTo(pos1_high, Config.TweenSpeed)
+                    local success = stealthMove(pos1_high)
                     
                     if not success or not char:FindFirstChild("HumanoidRootPart") then return end
 
-                    -- 3. Descer por Chunks para a Posição 1 Real
+                    -- 3. Descer Stealth para a Posição 1 Real
                     local pos1_real = CFrame.new(1760.85242, 9.82812977, -10489.0752)
-                    safeTeleport(pos1_real)
+                    stealthMove(pos1_real)
                     task.wait(0.2)
 
                     -- 4. Reload e Espera 0.5s
@@ -173,9 +151,9 @@ task.spawn(function()
                     })
                     task.wait(0.2)
 
-                    -- 6. Teleporte para Posição 2 (Chunks)
+                    -- 6. Teleporte Curto para Posição 2 (Stealth)
                     if char:FindFirstChild("HumanoidRootPart") then
-                        safeTeleport(CFrame.new(1765.56335, 57.0781345, -10528.8643))
+                        stealthMove(CFrame.new(1765.56335, 57.0781345, -10528.8643))
                     else return end
                     task.wait(0.15)
 
@@ -198,9 +176,9 @@ task.spawn(function()
                     })
                     task.wait(0.15)
 
-                    -- 9. Retorno por Chunks para Posição 1
+                    -- 9. Retorno Stealth para Posição 1
                     if char:FindFirstChild("HumanoidRootPart") then
-                        safeTeleport(CFrame.new(1760.85242, 9.82812977, -10489.0752))
+                        stealthMove(CFrame.new(1760.85242, 9.82812977, -10489.0752))
                     end
                 end)
             end
@@ -223,4 +201,4 @@ Tabs.Auto:AddToggle("AutoJuzo", {
 })
 
 Window:SelectTab(1)
-Fluent:Notify({ Title = "Comet", Content = "Script V7 (Sky Walk 400 + Tween 30) Carregado!", Duration = 5 })
+Fluent:Notify({ Title = "Comet", Content = "Script V8 (Stealth Mode) Carregado!", Duration = 5 })
